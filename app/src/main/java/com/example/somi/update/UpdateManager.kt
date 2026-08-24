@@ -38,8 +38,8 @@ object UpdateManager {
     private const val GITHUB_REPO = "SOMI"
     private const val API_URL = "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
 
-    const val CURRENT_VERSION_TAG = "v0.1.0"
-    const val CURRENT_VERSION_NAME = "0.1"
+    const val CURRENT_VERSION_TAG = "v0.1.1"
+    const val CURRENT_VERSION_NAME = "0.1.1"
 
     suspend fun checkLatestRelease(currentVersion: String = CURRENT_VERSION_NAME): UpdateInfo = withContext(Dispatchers.IO) {
         try {

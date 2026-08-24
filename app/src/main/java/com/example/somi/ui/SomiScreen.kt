@@ -228,7 +228,7 @@ private fun AppMilitaryHeader(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = "SOMI V 0.1",
+                        text = "SOMI V 0.1.1",
                         style = MaterialTheme.typography.titleLarge,
                         color = TextPrimary,
                         fontWeight = FontWeight.Black,
@@ -256,7 +256,7 @@ private fun AppMilitaryHeader(
                     modifier = Modifier.clickable { onCheckUpdate() }
                 ) {
                     Text(
-                        text = if (isCheckingUpdate) "SYNC..." else if (isUpdateAvailable) "★ UPDATE" else "v0.1",
+                        text = if (isCheckingUpdate) "SYNC..." else if (isUpdateAvailable) "★ UPDATE" else "v0.1.1",
                         style = MaterialTheme.typography.labelSmall,
                         color = if (isUpdateAvailable) Color.Black else ArmyGold,
                         fontWeight = FontWeight.Bold,
