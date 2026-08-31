@@ -4,9 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import com.example.somi.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,13 +33,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.somi.R
 import com.example.somi.model.AirwayState
 import com.example.somi.model.ExitWoundState
+import com.example.somi.model.PnxState
 import com.example.somi.model.ScenarioData
 import com.example.somi.model.SimulationStatus
 import com.example.somi.model.WoundType
@@ -67,6 +68,7 @@ import com.example.somi.ui.components.TacticalHeaderBadge
 import com.example.somi.ui.components.TacticalStatusBanner
 import com.example.somi.ui.components.TacticalTimerCard
 import com.example.somi.ui.components.TacticalUpdateDialog
+import com.example.somi.ui.components.TacticalVitalSignsCard
 
 @Composable
 fun SomiScreen(
@@ -77,7 +79,7 @@ fun SomiScreen(
     val scrollState = rememberScrollState()
     val context = LocalContext.current
 
-    // POP-UP / DIALOG DI DEBRIEFING CLINICO-TATTICO (Esito salvataggio o decesso)
+    // POP-UP / DIALOG DI DEBRIEFING CLINICO-TATTICO
     if (state.showDebriefDialog) {
         TacticalDebriefDialog(
             status = state.simulationStatus,
@@ -114,7 +116,7 @@ fun SomiScreen(
             onCheckUpdate = { viewModel.checkForUpdates(manual = true) }
         )
 
-        // STATUS OPERATIVO BANNER (Cliccabile per riaprire il debrief)
+        // STATUS OPERATIVO BANNER
         TacticalStatusBanner(
             status = state.simulationStatus,
             onClick = { viewModel.openDebriefDialog() }
@@ -128,12 +130,11 @@ fun SomiScreen(
             onResetScenario = { viewModel.resetScenario() }
         )
 
-        // CARD SCENARIO: MODULO M (MASSIVE BLEEDING)
+        // CARD SCENARIO: MODULO M, MODULO A & PARAMETRI VITALI
         state.scenario?.let { scenario ->
             ModuloMCard(scenario = scenario)
-
-            // CARD SCENARIO: MODULO A (AIRWAY)
             ModuloACard(scenario = scenario)
+            TacticalVitalSignsCard(vitalSigns = scenario.vitalSigns)
         }
 
         // SEZIONE TIMER & INTERVENTI TCCC
@@ -155,7 +156,7 @@ fun SomiScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "INTERVENTI TCCC & TIMER SOCCORSO",
+                    text = if (state.isTorsoScenario) "INTERVENTI TCCC (FERITA AL TORSO)" else "INTERVENTI TCCC & TIMER SOCCORSO",
                     style = MaterialTheme.typography.labelMedium,
                     color = ArmyGold,
                     fontWeight = FontWeight.Black,
@@ -164,33 +165,65 @@ fun SomiScreen(
             }
         }
 
-        // Timer 1: Emorragia Massiva (5 Minuti)
-        TacticalTimerCard(
-            timerTitle = "Emorragia Massiva",
-            timerSubtitle = "Tempo limite: 05:00 (Rischio dissanguamento)",
-            timeFormatted = state.formattedBleedingTimer,
-            progress = state.bleedingProgress,
-            isStopped = state.isMassiveBleedingStopped,
-            checkboxLabel = "Stop emorragia massiva",
-            checkboxChecked = state.isMassiveBleedingStopped,
-            onCheckedChange = { viewModel.toggleStopMassiveBleeding(it) },
-            timerColor = TacticalRed,
-            simulationActive = state.simulationStatus == SimulationStatus.RUNNING
-        )
+        if (state.isTorsoScenario) {
+            // SCENARIO TORSO:
+            // 1. Timer Vie Aeree (7 Minuti)
+            TacticalTimerCard(
+                timerTitle = "Pervietà delle vie aeree",
+                timerSubtitle = "Tempo limite: 07:00 (Rischio soffocamento/ipossia)",
+                timeFormatted = state.formattedAirwayTimer,
+                progress = state.airwayProgress,
+                isStopped = state.isAirwaySecured,
+                checkboxLabel = "Vie aeree pervie",
+                checkboxChecked = state.isAirwaySecured,
+                onCheckedChange = { viewModel.toggleAirwaySecured(it) },
+                timerColor = TacticalAirwayBlue,
+                simulationActive = state.simulationStatus == SimulationStatus.RUNNING
+            )
 
-        // Timer 2: Pervietà delle vie aeree (15 Minuti)
-        TacticalTimerCard(
-            timerTitle = "Pervietà delle vie aeree",
-            timerSubtitle = "Tempo limite: 15:00 (Rischio soffocamento)",
-            timeFormatted = state.formattedAirwayTimer,
-            progress = state.airwayProgress,
-            isStopped = state.isAirwaySecured,
-            checkboxLabel = "Vie aeree pervie",
-            checkboxChecked = state.isAirwaySecured,
-            onCheckedChange = { viewModel.toggleAirwaySecured(it) },
-            timerColor = TacticalAirwayBlue,
-            simulationActive = state.simulationStatus == SimulationStatus.RUNNING
-        )
+            // 2. Timer PNX (10 Minuti)
+            TacticalTimerCard(
+                timerTitle = "Trattamento Pneumotorace (PNX)",
+                timerSubtitle = "Tempo limite: 10:00 (Chest Seal / Decompressione con ago)",
+                timeFormatted = state.formattedPnxTimer,
+                progress = state.pnxProgress,
+                isStopped = state.isPnxTreated,
+                checkboxLabel = "Trattamento PNX eseguito",
+                checkboxChecked = state.isPnxTreated,
+                onCheckedChange = { viewModel.togglePnxTreated(it) },
+                timerColor = TacticalWarningOrange,
+                simulationActive = state.simulationStatus == SimulationStatus.RUNNING
+            )
+        } else {
+            // SCENARIO ARTO O GIUNZIONALE:
+            // 1. Timer Emorragia Massiva (5 Minuti)
+            TacticalTimerCard(
+                timerTitle = "Emorragia Massiva",
+                timerSubtitle = "Tempo limite: 05:00 (Rischio dissanguamento)",
+                timeFormatted = state.formattedBleedingTimer,
+                progress = state.bleedingProgress,
+                isStopped = state.isMassiveBleedingStopped,
+                checkboxLabel = "Stop emorragia massiva",
+                checkboxChecked = state.isMassiveBleedingStopped,
+                onCheckedChange = { viewModel.toggleStopMassiveBleeding(it) },
+                timerColor = TacticalRed,
+                simulationActive = state.simulationStatus == SimulationStatus.RUNNING
+            )
+
+            // 2. Timer Vie Aeree (7 Minuti)
+            TacticalTimerCard(
+                timerTitle = "Pervietà delle vie aeree",
+                timerSubtitle = "Tempo limite: 07:00 (Rischio soffocamento/ipossia)",
+                timeFormatted = state.formattedAirwayTimer,
+                progress = state.airwayProgress,
+                isStopped = state.isAirwaySecured,
+                checkboxLabel = "Vie aeree pervie",
+                checkboxChecked = state.isAirwaySecured,
+                onCheckedChange = { viewModel.toggleAirwaySecured(it) },
+                timerColor = TacticalAirwayBlue,
+                simulationActive = state.simulationStatus == SimulationStatus.RUNNING
+            )
+        }
 
         Spacer(modifier = Modifier.height(20.dp))
     }
@@ -228,7 +261,7 @@ private fun AppMilitaryHeader(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = "SOMI V 0.1.1",
+                        text = "SOMI V 0.1.2",
                         style = MaterialTheme.typography.titleLarge,
                         color = TextPrimary,
                         fontWeight = FontWeight.Black,
@@ -256,7 +289,7 @@ private fun AppMilitaryHeader(
                     modifier = Modifier.clickable { onCheckUpdate() }
                 ) {
                     Text(
-                        text = if (isCheckingUpdate) "SYNC..." else if (isUpdateAvailable) "★ UPDATE" else "v0.1.1",
+                        text = if (isCheckingUpdate) "SYNC..." else if (isUpdateAvailable) "★ UPDATE" else "v0.1.2",
                         style = MaterialTheme.typography.labelSmall,
                         color = if (isUpdateAvailable) Color.Black else ArmyGold,
                         fontWeight = FontWeight.Bold,
@@ -308,7 +341,8 @@ private fun ActionControlBar(
                 SimulationStatus.SAVED,
                 SimulationStatus.DEAD_BLEEDING,
                 SimulationStatus.DEAD_SUFFOCATED,
-                SimulationStatus.DEAD_BOTH
+                SimulationStatus.DEAD_PNX,
+                SimulationStatus.DEAD_MULTIPLE
             )
 
             Button(
@@ -364,7 +398,7 @@ private fun ModuloMCard(scenario: ScenarioData) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "MODULO M - MASSIVE BLEEDING",
+                    text = "MODULO M - MASSIVE BLEEDING / WOUND",
                     style = MaterialTheme.typography.titleMedium,
                     color = TacticalRedBright,
                     fontWeight = FontWeight.Bold
@@ -382,9 +416,13 @@ private fun ModuloMCard(scenario: ScenarioData) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 InfoField(
-                    label = "TIPO FERITA (50%)",
+                    label = "TIPO FERITA (20% G / 40% A / 40% T)",
                     value = scenario.woundType.displayName,
-                    badgeColor = if (scenario.woundType == WoundType.ARTICOLARE) ArmyGreenPrimary else ArmyGold,
+                    badgeColor = when (scenario.woundType) {
+                        WoundType.ARTO -> ArmyGreenPrimary
+                        WoundType.GIUNZIONALE -> ArmyGold
+                        WoundType.TORSO -> TacticalWarningOrange
+                    },
                     modifier = Modifier.weight(1f)
                 )
 
@@ -448,24 +486,36 @@ private fun ModuloACard(scenario: ScenarioData) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "MODULO A - AIRWAY",
+                    text = "MODULO A & R - AIRWAY / RESPIRATION",
                     style = MaterialTheme.typography.titleMedium,
                     color = TacticalAirwayBlue,
                     fontWeight = FontWeight.Bold
                 )
-                TacticalHeaderBadge(title = "VIE AEREE")
+                TacticalHeaderBadge(title = "TCCC")
             }
 
             Spacer(modifier = Modifier.height(10.dp))
             HorizontalDivider(color = ArmyBorder.copy(alpha = 0.5f))
             Spacer(modifier = Modifier.height(10.dp))
 
-            InfoField(
-                label = "VALUTAZIONE VIE AEREE (15% OSTRUZIONE)",
-                value = if (scenario.airwayState == AirwayState.OSTRUITE) "OSTRUITE (Intervento immediato)" else "PERVIE (Libere)",
-                badgeColor = if (scenario.airwayState == AirwayState.OSTRUITE) TacticalRedBright else TacticalSuccessBright,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                InfoField(
+                    label = "VIE AEREE (15% OSTRUZIONE)",
+                    value = if (scenario.airwayState == AirwayState.OSTRUITE) "OSTRUITE" else "PERVIE",
+                    badgeColor = if (scenario.airwayState == AirwayState.OSTRUITE) TacticalRedBright else TacticalSuccessBright,
+                    modifier = Modifier.weight(1f)
+                )
+
+                InfoField(
+                    label = "PNEUMOTORACE (PNX)",
+                    value = if (scenario.pnxState == PnxState.PRESENTE) "PRESENTE (TORSO)" else "ASSENTE",
+                    badgeColor = if (scenario.pnxState == PnxState.PRESENTE) TacticalRedBright else ArmyGreenPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
     }
 }

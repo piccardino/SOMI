@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.somi.model.SimulationStatus
+import com.example.somi.model.VitalSigns
 import com.example.somi.theme.ArmyBorder
 import com.example.somi.theme.ArmyBorderBright
 import com.example.somi.theme.ArmyCardBg
@@ -39,6 +40,7 @@ import com.example.somi.theme.ArmyCardElevated
 import com.example.somi.theme.ArmyGold
 import com.example.somi.theme.ArmyGreenLight
 import com.example.somi.theme.ArmyGreenPrimary
+import com.example.somi.theme.TacticalAirwayBlue
 import com.example.somi.theme.TacticalRed
 import com.example.somi.theme.TacticalRedBright
 import com.example.somi.theme.TacticalRedContainer
@@ -56,9 +58,9 @@ fun TacticalHeaderBadge(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = ArmyGreenPrimary.copy(alpha = 0.25f),
+        color = ArmyCardElevated,
         shape = RoundedCornerShape(4.dp),
-        border = BorderStroke(1.dp, ArmyGreenPrimary.copy(alpha = 0.6f)),
+        border = BorderStroke(1.dp, ArmyBorderBright),
         modifier = modifier
     ) {
         Row(
@@ -68,17 +70,15 @@ fun TacticalHeaderBadge(
             Box(
                 modifier = Modifier
                     .size(6.dp)
-                    .clip(RoundedCornerShape(1.dp))
+                    .clip(RoundedCornerShape(3.dp))
                     .background(ArmyGold)
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = title.uppercase(),
+                text = title,
                 style = MaterialTheme.typography.labelSmall,
-                color = ArmyGreenLight,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                softWrap = false
+                color = ArmyGold,
+                letterSpacing = 1.sp
             )
         }
     }
@@ -133,12 +133,19 @@ fun TacticalStatusBanner(
             title = "PAZIENTE MORTO SOFFOCATO",
             description = "Il tempo per le vie aeree è scaduto (00:00). Tocca per il report."
         )
-        SimulationStatus.DEAD_BOTH -> StatusBannerConfig(
+        SimulationStatus.DEAD_PNX -> StatusBannerConfig(
+            bgColor = TacticalRedContainer,
+            borderColor = TacticalRedBright,
+            textColor = TacticalRedBright,
+            title = "PAZIENTE MORTO PER PNX IPERTESO",
+            description = "Il tempo per il trattamento PNX è scaduto (00:00). Tocca per il report."
+        )
+        SimulationStatus.DEAD_MULTIPLE -> StatusBannerConfig(
             bgColor = TacticalRedContainer,
             borderColor = TacticalRedBright,
             textColor = TacticalRedBright,
             title = "PAZIENTE DECEDUTO",
-            description = "Decesso combinato (00:00). Tocca per visualizzare il report."
+            description = "Decesso per complicanze multiple (00:00). Tocca per visualizzare il report."
         )
     }
 
@@ -185,6 +192,156 @@ private data class StatusBannerConfig(
     val title: String,
     val description: String
 )
+
+@Composable
+fun TacticalVitalSignsCard(
+    vitalSigns: VitalSigns,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = ArmyCardBg),
+        border = BorderStroke(1.dp, ArmyBorder),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(TacticalAirwayBlue)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "PARAMETRI VITALI PAZIENTE",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TacticalAirwayBlue,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.sp
+                    )
+                }
+                TacticalHeaderBadge(title = "MONITOR")
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Griglia 2x2 Parametri
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // FC: Battiti
+                Surface(
+                    color = ArmyCardElevated,
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(1.dp, ArmyBorderBright),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = "FC (BATTITI)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextMuted
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = vitalSigns.formattedHr,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = TacticalRedBright,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // PA: Pressione
+                Surface(
+                    color = ArmyCardElevated,
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(1.dp, ArmyBorderBright),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = "PA (PRESSIONE)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextMuted
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = vitalSigns.formattedBp,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = ArmyGold,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // FR: Atti Respiratori
+                Surface(
+                    color = ArmyCardElevated,
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(1.dp, ArmyBorderBright),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = "FR (ATTI RESP.)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextMuted
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = vitalSigns.formattedRr,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = TacticalAirwayBlue,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // SpO2: Saturazione
+                Surface(
+                    color = ArmyCardElevated,
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(1.dp, ArmyBorderBright),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = "SpO2 (SATURAZIONE)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextMuted
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = vitalSigns.formattedSpo2,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = TacticalSuccessBright,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun TacticalTimerCard(
@@ -259,7 +416,7 @@ fun TacticalTimerCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Barra di progresso
+            // Barra di Progresso
             LinearProgressIndicator(
                 progress = { progress },
                 modifier = Modifier

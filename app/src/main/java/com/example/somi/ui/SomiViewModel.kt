@@ -8,8 +8,11 @@ import com.example.somi.model.ArticularLocation
 import com.example.somi.model.ConsciousnessState
 import com.example.somi.model.ExitWoundState
 import com.example.somi.model.JunctionalLocation
+import com.example.somi.model.PnxState
 import com.example.somi.model.ScenarioData
 import com.example.somi.model.SimulationStatus
+import com.example.somi.model.TorsoLocation
+import com.example.somi.model.VitalSigns
 import com.example.somi.model.WoundType
 import com.example.somi.update.UpdateDownloadState
 import com.example.somi.update.UpdateInfo
@@ -30,8 +33,10 @@ data class SomiUiState(
     val simulationStatus: SimulationStatus = SimulationStatus.IDLE,
     val massiveBleedingSecondsRemaining: Int = TOTAL_BLEEDING_SECONDS,
     val airwaySecondsRemaining: Int = TOTAL_AIRWAY_SECONDS,
+    val pnxSecondsRemaining: Int = TOTAL_PNX_SECONDS,
     val isMassiveBleedingStopped: Boolean = false,
     val isAirwaySecured: Boolean = false,
+    val isPnxTreated: Boolean = false,
     val showDebriefDialog: Boolean = false,
     val updateInfo: UpdateInfo = UpdateInfo(),
     val downloadState: UpdateDownloadState = UpdateDownloadState.Idle,
@@ -41,6 +46,7 @@ data class SomiUiState(
 ) {
     val totalBleedingSeconds: Int get() = TOTAL_BLEEDING_SECONDS
     val totalAirwaySeconds: Int get() = TOTAL_AIRWAY_SECONDS
+    val totalPnxSeconds: Int get() = TOTAL_PNX_SECONDS
 
     val bleedingProgress: Float
         get() = massiveBleedingSecondsRemaining.toFloat() / TOTAL_BLEEDING_SECONDS.toFloat()
@@ -48,15 +54,25 @@ data class SomiUiState(
     val airwayProgress: Float
         get() = airwaySecondsRemaining.toFloat() / TOTAL_AIRWAY_SECONDS.toFloat()
 
+    val pnxProgress: Float
+        get() = pnxSecondsRemaining.toFloat() / TOTAL_PNX_SECONDS.toFloat()
+
     val formattedBleedingTimer: String
         get() = formatTime(massiveBleedingSecondsRemaining)
 
     val formattedAirwayTimer: String
         get() = formatTime(airwaySecondsRemaining)
 
+    val formattedPnxTimer: String
+        get() = formatTime(pnxSecondsRemaining)
+
+    val isTorsoScenario: Boolean
+        get() = scenario?.woundType == WoundType.TORSO
+
     companion object {
-        const val TOTAL_BLEEDING_SECONDS = 5 * 60 // 5 minuti (300 sec)
-        const val TOTAL_AIRWAY_SECONDS = 15 * 60  // 15 minuti (900 sec)
+        const val TOTAL_BLEEDING_SECONDS = 5 * 60  // 5 minuti (300 sec)
+        const val TOTAL_AIRWAY_SECONDS = 7 * 60    // 7 minuti (420 sec)
+        const val TOTAL_PNX_SECONDS = 10 * 60      // 10 minuti (600 sec)
 
         fun formatTime(totalSeconds: Int): String {
             val minutes = totalSeconds / 60
@@ -149,25 +165,37 @@ class SomiViewModel : ViewModel() {
     }
 
     /**
-     * Genera un nuovo scenario clinico-tattico secondo le specifiche:
-     * - 1 colpo arma da fuoco solo in zona giunzionale o articolare (50% - 50%)
+     * Genera un nuovo scenario clinico-tattico:
+     * - 20% Giunzionale, 40% Arto, 40% Torso
      * - Foro di uscita con probabilità 80%
      * - Stato di coscienza: Alert, Verbal, Pain, Unresponsive
      * - Modulo A: probabilità vie aeree ostruite 15%
+     * - Se Torso: PNX Presente (100%)
+     * - Parametri Vitali: battiti 60-100, pressione 80/120 (120/80), atti respiratori 15, saturazione 95-99%
      */
     fun generateScenario() {
         timerJob?.cancel()
 
-        // 50% articolare vs 50% giunzionale
-        val isArticular = Random.nextBoolean()
-        val woundType = if (isArticular) WoundType.ARTICOLARE else WoundType.GIUNZIONALE
+        val rand = Random.nextFloat()
+        val woundType = when {
+            rand < 0.20f -> WoundType.GIUNZIONALE // 20%
+            rand < 0.60f -> WoundType.ARTO        // 40%
+            else -> WoundType.TORSO              // 40%
+        }
 
-        val woundLocationName = if (isArticular) {
-            val locations = ArticularLocation.entries
-            locations[Random.nextInt(locations.size)].displayName
-        } else {
-            val locations = JunctionalLocation.entries
-            locations[Random.nextInt(locations.size)].displayName
+        val woundLocationName = when (woundType) {
+            WoundType.ARTO -> {
+                val locations = ArticularLocation.entries
+                locations[Random.nextInt(locations.size)].displayName
+            }
+            WoundType.GIUNZIONALE -> {
+                val locations = JunctionalLocation.entries
+                locations[Random.nextInt(locations.size)].displayName
+            }
+            WoundType.TORSO -> {
+                val locations = TorsoLocation.entries
+                locations[Random.nextInt(locations.size)].displayName
+            }
         }
 
         // 80% probabilità foro di uscita presente
@@ -188,12 +216,36 @@ class SomiViewModel : ViewModel() {
             AirwayState.PERVIE
         }
 
+        // Se penetra il torso -> PNX presente
+        val pnxState = if (woundType == WoundType.TORSO) {
+            PnxState.PRESENTE
+        } else {
+            PnxState.ASSENTE
+        }
+
+        // Parametri Vitali: battiti 60-100, pressione 80/120, atti 15, saturazione 95-99%
+        val heartRate = Random.nextInt(60, 101)
+        val systolicBp = Random.nextInt(118, 125)
+        val diastolicBp = Random.nextInt(78, 85)
+        val respiratoryRate = 15
+        val oxygenSaturation = Random.nextInt(95, 100)
+
+        val vitalSigns = VitalSigns(
+            heartRate = heartRate,
+            systolicBp = systolicBp,
+            diastolicBp = diastolicBp,
+            respiratoryRate = respiratoryRate,
+            oxygenSaturation = oxygenSaturation
+        )
+
         val newScenario = ScenarioData(
             woundType = woundType,
             woundLocationName = woundLocationName,
             exitWound = exitWound,
             consciousness = consciousness,
-            airwayState = airway
+            airwayState = airway,
+            pnxState = pnxState,
+            vitalSigns = vitalSigns
         )
 
         _uiState.update {
@@ -202,8 +254,10 @@ class SomiViewModel : ViewModel() {
                 simulationStatus = SimulationStatus.READY,
                 massiveBleedingSecondsRemaining = SomiUiState.TOTAL_BLEEDING_SECONDS,
                 airwaySecondsRemaining = SomiUiState.TOTAL_AIRWAY_SECONDS,
+                pnxSecondsRemaining = SomiUiState.TOTAL_PNX_SECONDS,
                 isMassiveBleedingStopped = false,
                 isAirwaySecured = false,
+                isPnxTreated = false,
                 showDebriefDialog = false,
                 updateInfo = it.updateInfo,
                 downloadState = it.downloadState,
@@ -238,54 +292,83 @@ class SomiViewModel : ViewModel() {
                     break
                 }
 
+                val isTorso = currentState.isTorsoScenario
                 var bleedingSeconds = currentState.massiveBleedingSecondsRemaining
                 var airwaySeconds = currentState.airwaySecondsRemaining
+                var pnxSeconds = currentState.pnxSecondsRemaining
 
-                // Timer Emorragia Massiva (attivo solo se la checkbox non è spuntata)
-                if (!currentState.isMassiveBleedingStopped && bleedingSeconds > 0) {
-                    bleedingSeconds -= 1
-                }
+                if (isTorso) {
+                    // Scenario TORSO: Timer Vie Aeree (7 min) + Timer PNX (10 min)
+                    if (!currentState.isAirwaySecured && airwaySeconds > 0) {
+                        airwaySeconds -= 1
+                    }
+                    if (!currentState.isPnxTreated && pnxSeconds > 0) {
+                        pnxSeconds -= 1
+                    }
 
-                // Timer Vie Aeree (attivo solo se la checkbox non è spuntata)
-                if (!currentState.isAirwaySecured && airwaySeconds > 0) {
-                    airwaySeconds -= 1
-                }
+                    val isAirwayDead = airwaySeconds <= 0
+                    val isPnxDead = pnxSeconds <= 0
 
-                // Valuta condizioni di morte
-                val isBleedingDead = bleedingSeconds <= 0
-                val isAirwayDead = airwaySeconds <= 0
+                    val newStatus = when {
+                        isAirwayDead && isPnxDead -> SimulationStatus.DEAD_MULTIPLE
+                        isAirwayDead -> SimulationStatus.DEAD_SUFFOCATED
+                        isPnxDead -> SimulationStatus.DEAD_PNX
+                        currentState.isAirwaySecured && currentState.isPnxTreated -> SimulationStatus.SAVED
+                        else -> SimulationStatus.RUNNING
+                    }
 
-                val newStatus = when {
-                    isBleedingDead && isAirwayDead -> SimulationStatus.DEAD_BOTH
-                    isBleedingDead -> SimulationStatus.DEAD_BLEEDING
-                    isAirwayDead -> SimulationStatus.DEAD_SUFFOCATED
-                    currentState.isMassiveBleedingStopped && currentState.isAirwaySecured -> SimulationStatus.SAVED
-                    else -> SimulationStatus.RUNNING
-                }
+                    val hasEnded = newStatus != SimulationStatus.RUNNING
 
-                val hasEnded = newStatus != SimulationStatus.RUNNING
+                    _uiState.update {
+                        it.copy(
+                            airwaySecondsRemaining = airwaySeconds,
+                            pnxSecondsRemaining = pnxSeconds,
+                            simulationStatus = newStatus,
+                            showDebriefDialog = if (hasEnded) true else it.showDebriefDialog
+                        )
+                    }
 
-                _uiState.update {
-                    it.copy(
-                        massiveBleedingSecondsRemaining = bleedingSeconds,
-                        airwaySecondsRemaining = airwaySeconds,
-                        simulationStatus = newStatus,
-                        showDebriefDialog = if (hasEnded) true else it.showDebriefDialog
-                    )
-                }
+                    if (hasEnded) break
 
-                if (hasEnded) {
-                    break
+                } else {
+                    // Scenario ARTO o GIUNZIONALE: Timer Emorragia Massiva (5 min) + Timer Vie Aeree (7 min)
+                    if (!currentState.isMassiveBleedingStopped && bleedingSeconds > 0) {
+                        bleedingSeconds -= 1
+                    }
+                    if (!currentState.isAirwaySecured && airwaySeconds > 0) {
+                        airwaySeconds -= 1
+                    }
+
+                    val isBleedingDead = bleedingSeconds <= 0
+                    val isAirwayDead = airwaySeconds <= 0
+
+                    val newStatus = when {
+                        isBleedingDead && isAirwayDead -> SimulationStatus.DEAD_MULTIPLE
+                        isBleedingDead -> SimulationStatus.DEAD_BLEEDING
+                        isAirwayDead -> SimulationStatus.DEAD_SUFFOCATED
+                        currentState.isMassiveBleedingStopped && currentState.isAirwaySecured -> SimulationStatus.SAVED
+                        else -> SimulationStatus.RUNNING
+                    }
+
+                    val hasEnded = newStatus != SimulationStatus.RUNNING
+
+                    _uiState.update {
+                        it.copy(
+                            massiveBleedingSecondsRemaining = bleedingSeconds,
+                            airwaySecondsRemaining = airwaySeconds,
+                            simulationStatus = newStatus,
+                            showDebriefDialog = if (hasEnded) true else it.showDebriefDialog
+                        )
+                    }
+
+                    if (hasEnded) break
                 }
             }
         }
     }
 
     /**
-     * Checkbox Stop emorragia massiva:
-     * - Se spuntata ferma il timer emorragia
-     * - Se deselezionata riattiva il timer emorragia
-     * - Se entrambe le checkbox sono spuntate -> Paziente Salvato
+     * Checkbox Stop emorragia massiva (Arto / Giunzionale)
      */
     fun toggleStopMassiveBleeding(stopped: Boolean) {
         _uiState.update { current ->
@@ -295,10 +378,7 @@ class SomiViewModel : ViewModel() {
     }
 
     /**
-     * Checkbox Vie aeree pervie:
-     * - Se spuntata ferma il timer vie aeree
-     * - Se deselezionata riattiva il timer vie aeree
-     * - Se entrambe le checkbox sono spuntate -> Paziente Salvato
+     * Checkbox Vie aeree pervie (Tutti gli scenari)
      */
     fun toggleAirwaySecured(secured: Boolean) {
         _uiState.update { current ->
@@ -307,9 +387,24 @@ class SomiViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Checkbox Trattamento PNX / Decompressione (Torso)
+     */
+    fun togglePnxTreated(treated: Boolean) {
+        _uiState.update { current ->
+            val updated = current.copy(isPnxTreated = treated)
+            evaluateStatusOnCheckboxChange(updated)
+        }
+    }
+
     private fun evaluateStatusOnCheckboxChange(state: SomiUiState): SomiUiState {
         // Se il paziente è già morto, non si modifica lo stato
-        if (state.simulationStatus in listOf(SimulationStatus.DEAD_BLEEDING, SimulationStatus.DEAD_SUFFOCATED, SimulationStatus.DEAD_BOTH)) {
+        if (state.simulationStatus in listOf(
+            SimulationStatus.DEAD_BLEEDING,
+            SimulationStatus.DEAD_SUFFOCATED,
+            SimulationStatus.DEAD_PNX,
+            SimulationStatus.DEAD_MULTIPLE
+        )) {
             return state
         }
 
@@ -318,8 +413,13 @@ class SomiViewModel : ViewModel() {
             return state
         }
 
-        // Se entrambe sono spuntate -> Paziente Salvato
-        return if (state.isMassiveBleedingStopped && state.isAirwaySecured) {
+        val isSaved = if (state.isTorsoScenario) {
+            state.isAirwaySecured && state.isPnxTreated
+        } else {
+            state.isMassiveBleedingStopped && state.isAirwaySecured
+        }
+
+        return if (isSaved) {
             timerJob?.cancel()
             state.copy(simulationStatus = SimulationStatus.SAVED, showDebriefDialog = true)
         } else {
@@ -343,7 +443,8 @@ class SomiViewModel : ViewModel() {
             SimulationStatus.SAVED,
             SimulationStatus.DEAD_BLEEDING,
             SimulationStatus.DEAD_SUFFOCATED,
-            SimulationStatus.DEAD_BOTH
+            SimulationStatus.DEAD_PNX,
+            SimulationStatus.DEAD_MULTIPLE
         )) {
             _uiState.update { it.copy(showDebriefDialog = true) }
         }
@@ -359,8 +460,10 @@ class SomiViewModel : ViewModel() {
                 simulationStatus = SimulationStatus.READY,
                 massiveBleedingSecondsRemaining = SomiUiState.TOTAL_BLEEDING_SECONDS,
                 airwaySecondsRemaining = SomiUiState.TOTAL_AIRWAY_SECONDS,
+                pnxSecondsRemaining = SomiUiState.TOTAL_PNX_SECONDS,
                 isMassiveBleedingStopped = false,
                 isAirwaySecured = false,
+                isPnxTreated = false,
                 showDebriefDialog = false
             )
         }
